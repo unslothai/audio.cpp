@@ -483,6 +483,174 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  windows-arm64:
+    name: windows/arm64-${{ matrix.accel }}
+    # Native builds run the static eSpeak data generators and the CPU smoke test.
+    runs-on: windows-11-arm
+    timeout-minutes: 350
+    environment: release-signing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { accel: cpu, expect: 'cpu' }
+          - { accel: cuda13, expect: 'cpu,cuda' }
+    defaults:
+      run: { shell: pwsh }
+    steps:
+      - name: Checkout build tooling (this repo)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with: { path: tooling, persist-credentials: false }
+
+      - name: Download stamped source @ ${{ inputs.tag }}
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with: { name: "${{ inputs.source_artifact }}", path: srcpkg }
+
+      - name: Extract and verify source
+        run: |
+          New-Item -ItemType Directory -Path src | Out-Null
+          tar.exe -xzf "srcpkg/audio.cpp-source-${{ inputs.tag }}.tar.gz" -C src --strip-components=1
+          if ($LASTEXITCODE -ne 0) { throw 'source extraction failed' }
+          if ((Get-Content -Raw src/UNSLOTH_SOURCE_COMMIT).Trim() -ne '${{ inputs.commit }}') { throw 'source SHA mismatch' }
+
+      - name: Native ARM64 Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with: { python-version: '3.13', architecture: arm64 }
+
+      - name: Setup MSVC (ARM64 headers, linker, runtime and nvcc host compiler)
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with: { arch: arm64 }
+
+      - name: Check native build tools
+        run: |
+          # The native runner ships LLVM, CMake and Ninja. Do not silently use
+          # emulated x64 clang: eSpeak configures a child project with that path.
+          clang --version
+          if ($LASTEXITCODE -ne 0) { throw 'native LLVM is required' }
+          cmake --version
+          if ($LASTEXITCODE -ne 0) { throw 'CMake is required' }
+          ninja --version
+          if ($LASTEXITCODE -ne 0) { throw 'Ninja is required' }
+
+      - name: Install pinned CUDA 13.4.1 ARM64 redistributables
+        if: matrix.accel == 'cuda13'
+        run: |
+          & tooling/scripts/unsloth/setup_cuda_windows_arm64.ps1 `
+            -Destination "$env:RUNNER_TEMP/cuda-arm64" -Stage "$env:RUNNER_TEMP/cuda-redist"
+          if ($LASTEXITCODE -ne 0) { throw 'CUDA installation failed' }
+
+      - name: Build native server, eSpeak and CUDA audio kernels
+        run: |
+          & tooling/scripts/unsloth/build_windows_arm64.ps1 `
+            -Source "$env:GITHUB_WORKSPACE/src" -Build "$env:GITHUB_WORKSPACE/build" `
+            -Version '${{ inputs.tag }}' -Accelerator '${{ matrix.accel }}'
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 build failed' }
+          "BIN_DIR=$env:GITHUB_WORKSPACE/build/bin" | Add-Content $env:GITHUB_ENV
+
+      - name: Collect ARM64 CUDA runtime DLLs
+        if: matrix.accel == 'cuda13'
+        run: |
+          New-Item -ItemType Directory -Path cudart | Out-Null
+          foreach ($pattern in 'cudart64_*.dll', 'cublas64_*.dll', 'cublasLt64_*.dll', 'cufft64_*.dll') {
+            $dlls = @(Get-ChildItem -Path "$env:CUDA_PATH/bin/arm64/$pattern")
+            if ($dlls.Count -eq 0) { throw "missing ARM64 $pattern" }
+            $dlls | Copy-Item -Destination cudart
+          }
+          python tooling/scripts/unsloth/check_windows_arch.py --dir cudart --arch arm64
+          if ($LASTEXITCODE -ne 0) { throw 'wrong CUDA runtime architecture' }
+
+      - name: Bundle ARM64 VC runtime
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          $redist = Get-ChildItem "$vs/VC/Redist/MSVC" -Directory |
+            Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
+            Select-Object -First 1
+          $crt = Join-Path $redist.FullName 'arm64/Microsoft.VC143.CRT'
+          if (-not (Test-Path -LiteralPath $crt)) { throw "missing ARM64 VC runtime: $crt" }
+          Get-ChildItem "$crt/*.dll" | Where-Object { $_.Name -match '^(vcruntime140|msvcp140)' } |
+            Copy-Item -Destination $env:BIN_DIR
+
+      - name: Sign Windows ARM64 binaries
+        id: sign
+        if: inputs.sign_windows
+        uses: ./tooling/.github/actions/sign-windows
+        with:
+          path: ${{ env.BIN_DIR }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-account: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          azure-certificate-profile: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+
+      - name: Package ARM64 server and runtime companion
+        run: |
+          $pkgArgs = @('--bin-dir', $env:BIN_DIR, '--src-dir', 'src', '--out-dir', 'dist',
+            '--tag', '${{ inputs.tag }}', '--upstream-tag', '${{ inputs.upstream_tag }}',
+            '--commit', '${{ inputs.commit }}', '--source-repo', '${{ inputs.repo }}',
+            '--os', 'windows', '--arch', 'arm64', '--accel', '${{ matrix.accel }}',
+            '--min-os', 'windows-11', '--espeak-commit', '${{ inputs.espeak_commit }}')
+          if ('${{ matrix.accel }}' -eq 'cuda13') {
+            # Static CUDA imports these DLLs even for --version; no driver import (NO_VMM).
+            $env:PATH = "$env:GITHUB_WORKSPACE/cudart;$env:PATH"
+            $pkgArgs += @('--runtime-line', 'cuda13', '--cuda-toolkit', '13.4.1', '--sms', '121-real;120-real;100-virtual')
+          }
+          python tooling/scripts/unsloth/package_bundle.py @pkgArgs
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 packaging failed' }
+          if ('${{ matrix.accel }}' -eq 'cuda13') {
+            python tooling/scripts/unsloth/package_bundle.py --cudart-dir cudart --out-dir dist `
+              --tag '${{ inputs.tag }}' --arch arm64 --accel cuda13
+            if ($LASTEXITCODE -ne 0) { throw 'ARM64 runtime packaging failed' }
+          }
+
+      - name: Verify every shipped PE signature
+        if: inputs.sign_windows && steps.sign.outputs.signed == 'true'
+        run: |
+          $zips = @(Get-ChildItem dist -Filter 'audio-*-bin-*.zip' | ForEach-Object { $_.FullName })
+          if ($zips.Count -eq 0) { throw 'no bundle in dist/' }
+          & tooling/.github/scripts/assert-windows-bundle-signed.ps1 -Path $zips
+          if ($LASTEXITCODE -ne 0) { throw 'bundle signature check failed' }
+
+      - name: Cache smoke models
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with: { path: smoke-models, key: "${{ env.SMOKE_MODELS_KEY }}", enableCrossOsArchive: true }
+
+      - name: Validate finished ARM64 bundle and CPU fallback (Kokoro + Moonshine)
+        run: |
+          $bundle = "dist/audio-${{ inputs.tag }}-bin-windows-arm64-${{ matrix.accel }}.zip"
+          $unpacked = Join-Path $env:RUNNER_TEMP 'arm64-bundle-check'
+          Expand-Archive $bundle $unpacked
+          python tooling/scripts/unsloth/check_windows_arch.py --dir $unpacked --arch arm64
+          if ($LASTEXITCODE -ne 0) { throw 'wrong bundle architecture' }
+          $extra = @()
+          if ('${{ matrix.accel }}' -eq 'cuda13') {
+            $runtime = Join-Path $env:RUNNER_TEMP 'arm64-cudart-check'
+            Expand-Archive "dist/audio-${{ inputs.tag }}-cudart-windows-arm64-cuda13.zip" $runtime
+            python tooling/scripts/unsloth/check_windows_arch.py --dir $runtime --arch arm64
+            if ($LASTEXITCODE -ne 0) { throw 'wrong runtime ZIP architecture' }
+            $extra += @('--lib-path', $runtime)
+          }
+          python tooling/scripts/unsloth/validate_bundle.py --bundle $bundle `
+            --expect-backends '${{ matrix.expect }}' --smoke --backend cpu --models-dir smoke-models @extra
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 runtime validation failed' }
+
+      - name: Upload ARM64 bundle artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: audio-${{ inputs.tag }}-bin-windows-arm64-${{ matrix.accel }}
+          path: dist/audio-${{ inputs.tag }}-bin-windows-arm64-${{ matrix.accel }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload ARM64 CUDA runtime artifact
+        if: matrix.accel == 'cuda13'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: audio-${{ inputs.tag }}-cudart-windows-arm64-cuda13
+          path: dist/audio-${{ inputs.tag }}-cudart-windows-arm64-cuda13.zip
+          if-no-files-found: error
+          retention-days: 7
+
   macos:
     name: macos/${{ matrix.arch }}-metal
     runs-on: ${{ matrix.runner }}

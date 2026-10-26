@@ -10,7 +10,8 @@ name: Unsloth audio.cpp prebuilt (full release)
 #   build     unsloth-prebuilt-build.yml: Linux x64 (cpu, cpu-portable, vulkan,
 #             lean cuda12 / cuda13), Linux arm64 cpu (best-effort), Windows x64
 #             (cpu, cpu-portable, vulkan, cuda12, cuda13 + cudart zips), macOS
-#             arm64 / x64. Each bundle is validated on its own runner.
+#             arm64 / x64; Windows ARM64 cpu + cuda13 + runtime companion.
+#             Each bundle is validated on its own runner.
 #   assemble  Unsloth fingerprint gate, required-asset gate, manifest + sha256
 #             sidecars, then an atomic publish: draft, upload, undraft.
 #   reclaim   deletes this run's artifacts once they are release assets, or
@@ -119,7 +120,9 @@ jobs:
         with: { path: tooling, persist-credentials: false }
 
       - name: Self-test the packaging + validation scripts
-        run: python3 tooling/scripts/unsloth/test_prebuilt_scripts.py
+        run: |
+          python3 tooling/scripts/unsloth/test_prebuilt_scripts.py
+          python3 tooling/scripts/unsloth/test_windows_arm64_prebuilts.py
 
       - name: Resolve immutable commit + stamp source tree
         id: r
@@ -335,6 +338,9 @@ jobs:
             "audio-${TAG}-bin-ubuntu-x64-cuda12.tar.gz" \
             "audio-${TAG}-bin-ubuntu-x64-cuda13.tar.gz" \
             "audio-${TAG}-bin-windows-x64-cpu.zip" \
+            "audio-${TAG}-bin-windows-arm64-cpu.zip" \
+            "audio-${TAG}-bin-windows-arm64-cuda13.zip" \
+            "audio-${TAG}-cudart-windows-arm64-cuda13.zip" \
             "audio-${TAG}-bin-windows-x64-cpu-portable.zip" \
             "audio-${TAG}-bin-windows-x64-vulkan.zip" \
             "audio-${TAG}-bin-windows-x64-cuda12.zip" \
