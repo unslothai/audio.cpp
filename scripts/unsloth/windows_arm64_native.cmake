@@ -15,14 +15,16 @@ if(ENGINE_ENABLE_CUDA)
     if(NOT EXISTS "${_cuda}/bin/nvcc.exe")
         message(FATAL_ERROR "Install the CUDA Windows ARM64 redistributables first")
     endif()
-    # nvcc's host front-end is x64; target code and all link libraries are ARM64.
+    # Both nvcc's host front-end and its target code/link libraries are ARM64.
     set(CMAKE_CUDA_COMPILER "${_cuda}/bin/nvcc.exe" CACHE FILEPATH "" FORCE)
     if(EXISTS "${_vc}/bin/Hostarm64/arm64/cl.exe")
         set(CMAKE_CUDA_HOST_COMPILER "${_vc}/bin/Hostarm64/arm64/cl.exe" CACHE FILEPATH "" FORCE)
     else()
         set(CMAKE_CUDA_HOST_COMPILER "${_vc}/bin/Hostx64/arm64/cl.exe" CACHE FILEPATH "" FORCE)
     endif()
-    set(CMAKE_CUDA_FLAGS_INIT "-target-dir=arm64")
+    # CI/the local recipe already initialize MSVC. Avoid another vcvars probe
+    # per translation unit (especially expensive with ARM64 registry discovery).
+    set(CMAKE_CUDA_FLAGS_INIT "-target-dir=arm64 --use-local-env")
     set(CMAKE_CUDA_RUNTIME_LIBRARY Shared CACHE STRING "" FORCE)
     set(CUDAToolkit_ROOT "${_cuda}" CACHE PATH "" FORCE)
     foreach(_lib cudart cudart_static cublas cublasLt cufft)

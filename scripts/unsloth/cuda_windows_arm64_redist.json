@@ -3,20 +3,20 @@
   "source": "https://developer.download.nvidia.com/compute/cuda/redist/redistrib_13.4.1.json",
   "components": [
     {
-      "relative_path": "cccl/windows-x86_64/cccl-windows-x86_64-13.3.4.2.1-archive.zip",
-      "sha256": "ea3ebdd98d4d98819cc26b66bc5a0931004ed35ff18eea8b93e0bd2c8bfa5d7c"
+      "relative_path": "cccl/windows-arm64/cccl-windows-arm64-13.3.4.2.1-archive.zip",
+      "sha256": "e8a7c96268ae6c52a7b8b07d96e1f84ab8eae5619c3b989024ce712dda5c2cc2"
     },
     {
-      "relative_path": "cuda_crt/windows-x86_64/cuda_crt-windows-x86_64-13.4.59-archive.zip",
-      "sha256": "f969a0e3b086a48f940563cd1b965cb5197fd9540c79cc952b1abfa479f9ede7"
+      "relative_path": "cuda_crt/windows-arm64/cuda_crt-windows-arm64-13.4.59-archive.zip",
+      "sha256": "a84f570d06497cf14187ddf9a2d656d752aaf66b2025c11eb93af01a8a1ce5ff"
     },
     {
-      "relative_path": "cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-13.4.59-archive.zip",
-      "sha256": "06a4fe6ec543030c5e5a7b85493cda90612015d9fff2a54ed0227162c937ea46"
+      "relative_path": "cuda_nvcc/windows-arm64/cuda_nvcc-windows-arm64-13.4.59-archive.zip",
+      "sha256": "4d26510f9d5b644e784a02b13423f9c8b79f8b15613ea0bb325bad42ed3443c4"
     },
     {
-      "relative_path": "libnvvm/windows-x86_64/libnvvm-windows-x86_64-13.4.59-archive.zip",
-      "sha256": "a7a07bcc21cc05bce83eedebcbcd9b9f5418c58316b0fa28a57cb2c548b29841"
+      "relative_path": "libnvvm/windows-arm64/libnvvm-windows-arm64-13.4.59-archive.zip",
+      "sha256": "2d051ea3fffddf67458fe66004e7045015409709c57f8cdcdade88d479b62e47"
     },
     {
       "relative_path": "cuda_cudart/windows-arm64/cuda_cudart-windows-arm64-13.4.49-archive.zip",

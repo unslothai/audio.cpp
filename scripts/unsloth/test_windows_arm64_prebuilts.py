@@ -70,6 +70,17 @@ class WindowsArm64PrebuiltTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             arch.check(self.bin, "arm64")
 
+    def test_cuda_manifest_uses_native_host_tools_and_target_libraries(self):
+        manifest = json.loads((Path(__file__).parent / "cuda_windows_arm64_redist.json").read_text())
+        kinds = set()
+        for component in manifest["components"]:
+            kind, platform, filename = component["relative_path"].split("/")
+            kinds.add(kind)
+            self.assertEqual(platform, "windows-arm64")
+            self.assertIn("windows-arm64", filename)
+            self.assertRegex(component["sha256"], r"^[0-9a-f]{64}$")
+        self.assertTrue({"cuda_nvcc", "libnvvm", "cuda_crt", "cccl", "cuda_cudart", "libcublas", "libcufft"}.issubset(kinds))
+
     def test_vc_runtime_directory_can_contain_an_x64_only_exception_runtime(self):
         redist = self.root / "redist"
         redist.mkdir()

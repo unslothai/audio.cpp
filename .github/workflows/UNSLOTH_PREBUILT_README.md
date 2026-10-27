@@ -238,9 +238,9 @@ backend with `ENGINE_ENABLE_CPU_ALL_VARIANTS=OFF`; ggml's Windows ARM all-varian
 branch is unsupported. These bundles require Windows 11.
 
 The CUDA leg compiles the entire server, including audio.cpp's CUDA ISTFT and
-sampling sources, rather than overlaying just a `ggml-cuda.dll`. NVIDIA's x64
-nvcc runs under Windows emulation; its target libraries and shipped runtime DLLs
-are ARM64. CUDA 13.4.1 components and SHA256 values are pinned in
+sampling sources, rather than overlaying just a `ggml-cuda.dll`. NVIDIA's native
+ARM64 nvcc and libnvvm compile against ARM64 target libraries; the shipped runtime
+DLLs are also ARM64. CUDA 13.4.1 components and SHA256 values are pinned in
 `scripts/unsloth/cuda_windows_arm64_redist.json`. CUDA 12 is not offered for
 Windows ARM64. The static CUDA leg disables ggml VMM to avoid a direct
 `nvcuda.dll` import on the GPU-less runner, so its CPU fallback can be tested with

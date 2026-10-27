@@ -17,6 +17,17 @@ if ($LASTEXITCODE -ne 0 -or $target -notmatch '(?m)^Target: (aarch64|arm64).*-wi
     throw "Native ARM64 LLVM is required; clang target is $target"
 }
 $cuda = if ($Accelerator -eq 'cuda13') { 'ON' } else { 'OFF' }
+if ($cuda -eq 'ON') {
+    # nvcc --use-local-env compares the PATH compiler with -ccbin literally.
+    # Resolve the directory so VCToolsInstallDir's trailing slash cannot leave
+    # a doubled separator, and put the same host compiler as the toolchain first.
+    $hostBin = Join-Path $env:VCToolsInstallDir 'bin/Hostarm64/arm64'
+    if (-not (Test-Path -LiteralPath (Join-Path $hostBin 'cl.exe'))) {
+        $hostBin = Join-Path $env:VCToolsInstallDir 'bin/Hostx64/arm64'
+    }
+    $hostBin = (Resolve-Path -LiteralPath $hostBin).Path
+    $env:PATH = "$hostBin;$env:PATH"
+}
 $configureArgs = @('-S', $Source, '-B', $Build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
     "-DCMAKE_TOOLCHAIN_FILE=$PSScriptRoot/windows_arm64_native.cmake",
     "-DAUDIOCPP_VERSION=$Version", "-DENGINE_ENABLE_CUDA=$cuda",

@@ -2,7 +2,7 @@
 # Copyright 2026-present the Unsloth AI Inc. team. All rights reserved.
 param([Parameter(Mandatory)][string]$Destination, [Parameter(Mandatory)][string]$Stage)
 $ErrorActionPreference = 'Stop'
-# CUDA's Windows ARM64 target uses the x64 host compiler (emulated on Windows ARM).
+# CUDA 13.4 provides native ARM64 host tools as well as ARM64 target libraries.
 # Pin every component and digest from NVIDIA's redistrib_13.4.1.json, as well as
 # the ARM64 cuFFT needed by audio.cpp's own CUDA ISTFT implementation.
 $manifest = Get-Content -Raw (Join-Path $PSScriptRoot 'cuda_windows_arm64_redist.json') | ConvertFrom-Json
@@ -27,6 +27,8 @@ foreach ($lib in 'cudart.lib', 'cudart_static.lib', 'cuda.lib', 'cublas.lib', 'c
 foreach ($pattern in 'cudart64_*.dll', 'cublas64_*.dll', 'cublasLt64_*.dll', 'cufft64_*.dll') {
     if (-not (Get-ChildItem -Path "$Destination/bin/arm64/$pattern")) { throw "Missing ARM64 $pattern" }
 }
+python (Join-Path $PSScriptRoot 'check_windows_arch.py') --dir $Destination --arch arm64
+if ($LASTEXITCODE -ne 0) { throw 'CUDA host tools or runtime DLLs are not native ARM64' }
 "CUDA_PATH=$Destination" | Add-Content $env:GITHUB_ENV
 "$Destination/bin" | Add-Content $env:GITHUB_PATH
 exit 0
