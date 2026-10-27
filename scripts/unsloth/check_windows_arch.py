@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import struct
 from pathlib import Path
 
@@ -32,12 +33,31 @@ def check(root: Path, arch: str) -> None:
     print(f"ok: {len(files)} Windows binaries are {arch}")
 
 
+def copy_vc_runtime(source: Path, destination: Path, arch: str) -> None:
+    # Microsoft's ARM64 CRT folder also contains the x64-only vcruntime140_1.
+    # Check the actual PE headers rather than trusting the containing directory.
+    native = [p for p in sorted(source.glob("*.dll"))
+              if p.name.lower().startswith(("vcruntime140", "msvcp140"))
+              and pe_machine(p) == MACHINES[arch]]
+    required = {"vcruntime140.dll", "msvcp140.dll"}
+    if not required.issubset({p.name.lower() for p in native}):
+        raise ValueError(f"{source}: missing {arch} VC runtime DLLs")
+    destination.mkdir(parents=True, exist_ok=True)
+    for path in native:
+        shutil.copy2(path, destination / path.name)
+    print(f"ok: copied {len(native)} native {arch} VC runtime DLLs")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", required=True, type=Path)
     parser.add_argument("--arch", required=True, choices=MACHINES)
+    parser.add_argument("--vc-runtime-source", type=Path,
+                        help="copy matching-architecture VC runtime DLLs into --dir before checking")
     args = parser.parse_args()
     try:
+        if args.vc_runtime_source:
+            copy_vc_runtime(args.vc_runtime_source, args.dir, args.arch)
         check(args.dir, args.arch)
     except ValueError as exc:
         parser.exit(1, f"FAIL: {exc}\n")

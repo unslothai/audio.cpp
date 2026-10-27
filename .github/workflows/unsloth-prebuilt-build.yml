@@ -525,7 +525,7 @@ jobs:
         run: |
           # The native runner ships LLVM, CMake and Ninja. Do not silently use
           # emulated x64 clang: eSpeak configures a child project with that path.
-          clang --version
+          clang-cl --version
           if ($LASTEXITCODE -ne 0) { throw 'native LLVM is required' }
           cmake --version
           if ($LASTEXITCODE -ne 0) { throw 'CMake is required' }
@@ -568,8 +568,8 @@ jobs:
             Select-Object -First 1
           $crt = Join-Path $redist.FullName 'arm64/Microsoft.VC143.CRT'
           if (-not (Test-Path -LiteralPath $crt)) { throw "missing ARM64 VC runtime: $crt" }
-          Get-ChildItem "$crt/*.dll" | Where-Object { $_.Name -match '^(vcruntime140|msvcp140)' } |
-            Copy-Item -Destination $env:BIN_DIR
+          python tooling/scripts/unsloth/check_windows_arch.py --dir $env:BIN_DIR --arch arm64 --vc-runtime-source $crt
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 VC runtime collection failed' }
 
       - name: Sign Windows ARM64 binaries
         id: sign

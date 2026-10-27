@@ -74,6 +74,11 @@ packaging tag shipped. A published packaging tag is never rebuilt: bump
 `packaging_suffix` (`unsloth.2`, ...). Upstream `main` moves; the pipeline only
 ever builds the tag it is given.
 
+The shared source export also carries the marked Windows eSpeak compatibility
+patch from the tooling checkout. It adds the CRT declaration and correct argv
+casts needed by native `clang-cl`; other platforms keep their upstream behavior.
+The bundle includes that exact patch with the eSpeak source and license notices.
+
 Publication is **atomic**: the release is created as a draft (invisible to the
 anonymous API the installer reads), every asset is uploaded, then it is flipped
 to `draft=false`. A leftover draft from a failed run counts as "not published"

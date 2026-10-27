@@ -3,8 +3,9 @@
 # Native Windows ARM64 only: do NOT set CMAKE_SYSTEM_NAME. Static eSpeak builds
 # and executes data generators, which cannot be built as a cross-compile here.
 set(CMAKE_SYSTEM_PROCESSOR ARM64)
-set(CMAKE_C_COMPILER clang)
-set(CMAKE_CXX_COMPILER clang++)
+# The MSVC frontend keeps CUDA's MSVC host and C/C++ flag conventions aligned.
+set(CMAKE_C_COMPILER clang-cl)
+set(CMAKE_CXX_COMPILER clang-cl)
 set(CMAKE_C_COMPILER_TARGET aarch64-pc-windows-msvc)
 set(CMAKE_CXX_COMPILER_TARGET aarch64-pc-windows-msvc)
 

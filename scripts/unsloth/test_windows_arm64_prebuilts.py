@@ -7,7 +7,9 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -67,6 +69,63 @@ class WindowsArm64PrebuiltTest(unittest.TestCase):
     def test_native_arm64_passes(self):
         with contextlib.redirect_stdout(io.StringIO()):
             arch.check(self.bin, "arm64")
+
+    def test_vc_runtime_directory_can_contain_an_x64_only_exception_runtime(self):
+        redist = self.root / "redist"
+        redist.mkdir()
+        for name in ("vcruntime140.dll", "msvcp140.dll", "msvcp140_1.dll"):
+            (redist / name).write_bytes(pe(0xAA64))
+        (redist / "vcruntime140_1.dll").write_bytes(pe(0x8664))
+        with contextlib.redirect_stdout(io.StringIO()):
+            arch.copy_vc_runtime(redist, self.bin, "arm64")
+            arch.check(self.bin, "arm64")
+        self.assertTrue((self.bin / "msvcp140_1.dll").exists())
+        self.assertFalse((self.bin / "vcruntime140_1.dll").exists())
+
+    def test_vc_runtime_requires_native_core_dlls_before_copying(self):
+        redist = self.root / "redist"
+        redist.mkdir()
+        (redist / "vcruntime140.dll").write_bytes(pe(0x8664))
+        (redist / "msvcp140.dll").write_bytes(pe(0xAA64))
+        with self.assertRaisesRegex(ValueError, "missing arm64"):
+            arch.copy_vc_runtime(redist, self.bin, "arm64")
+        self.assertFalse((self.bin / "msvcp140.dll").exists())
+
+    @unittest.skipUnless(shutil.which("cmake"), "CMake is needed to exercise the eSpeak source patch")
+    def test_espeak_windows_data_generator_gets_the_crt_declaration(self):
+        patch = Path(__file__).resolve().parents[2] / "tools/cmake/espeak_patch.cmake"
+        for windows in (False, True):
+            with self.subTest(windows=windows):
+                source = self.root / str(windows)
+                (source / "cmake").mkdir(parents=True)
+                (source / "cmake/deps.cmake").write_text("else()\n  FetchContent_Declare(sonic-git\n")
+                (source / "src").mkdir()
+                (source / "src/CMakeLists.txt").write_text("")
+                (source / "src/espeak-ng.c").write_text("#include <fcntl.h>\n")
+                (source / "src/compat").mkdir()
+                (source / "src/compat/getopt.c").write_text("getopt_internal(nargc, __UNCONST(nargv), options);\n")
+                for component in ("libespeak-ng", "speechPlayer"):
+                    folder = source / "src" / component
+                    folder.mkdir()
+                    (folder / "CMakeLists.txt").write_text('target_compile_options(test PRIVATE "-fPIC" "-fvisibility=hidden")\n')
+                wrapper = source / "run-patch.cmake"
+                wrapper.write_text(
+                    f"set(WIN32 {'ON' if windows else 'OFF'})\n"
+                    f'include("{patch.as_posix()}")\n'
+                )
+                subprocess.run([
+                    shutil.which("cmake"), f"-DSOURCE_DIR={source}", "-P", str(wrapper),
+                ], check=True, capture_output=True)
+                for component in ("libespeak-ng", "speechPlayer"):
+                    result = (source / "src" / component / "CMakeLists.txt").read_text()
+                    self.assertIn('"-fPIC"', result)
+                    self.assertIn('"-fvisibility=hidden"', result)
+                self.assertEqual(
+                    "#include <io.h>" in (source / "src/espeak-ng.c").read_text(), windows,
+                )
+                self.assertEqual(
+                    "(char **)(nargv)" in (source / "src/compat/getopt.c").read_text(), windows,
+                )
 
     def test_x64_binary_is_not_an_arm64_bundle(self):
         (self.bin / "audiocpp_server.exe").write_bytes(pe(0x8664))

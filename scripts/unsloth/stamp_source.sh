@@ -39,4 +39,20 @@ if ! grep -qxF "set(AUDIOCPP_GIT_SHA \"${SHORT}\")" "$CM" \
 fi
 
 printf '%s\n' "$COMMIT" > "$SRC/UNSLOTH_SOURCE_COMMIT"
+
+# The build source is the immutable UPSTREAM tag, not this tooling checkout.
+# Carry only our Windows compatibility block into that ONE source export,
+# preserving the rest of upstream's eSpeak patch for every platform. The GPL
+# source note includes the actual patch next to the finished server.
+ESPEAK_PATCH="$SRC/tools/cmake/espeak_patch.cmake"
+if [ -f "$ESPEAK_PATCH" ]; then
+  TOOLING_PATCH="$(dirname "${BASH_SOURCE[0]}")/../../tools/cmake/espeak_patch.cmake"
+  grep -q '^# BEGIN UNSLOTH_WINDOWS_COMPAT$' "$TOOLING_PATCH"
+  grep -q '^# END UNSLOTH_WINDOWS_COMPAT$' "$TOOLING_PATCH"
+  WINDOWS_COMPAT="$(sed -n '/^# BEGIN UNSLOTH_WINDOWS_COMPAT$/,/^# END UNSLOTH_WINDOWS_COMPAT$/p' "$TOOLING_PATCH")"
+  sed -i.bak '/^# BEGIN UNSLOTH_WINDOWS_COMPAT$/,/^# END UNSLOTH_WINDOWS_COMPAT$/d' "$ESPEAK_PATCH"
+  rm -f "$ESPEAK_PATCH.bak"
+  printf '\n' >> "$ESPEAK_PATCH"
+  printf '%s\n' "$WINDOWS_COMPAT" >> "$ESPEAK_PATCH"
+fi
 echo "stamped $SRC: git ${SHORT} ${DATE}"

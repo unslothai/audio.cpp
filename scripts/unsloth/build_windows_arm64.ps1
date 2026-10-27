@@ -12,8 +12,8 @@ if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'Arm64') {
 }
 # eSpeak's child CMake receives compiler paths, so clang itself must default to
 # ARM64 too; a target flag only on the parent would accidentally build x64 data tools.
-$target = & clang -dumpmachine
-if ($LASTEXITCODE -ne 0 -or $target -notmatch '^(aarch64|arm64).*-windows') {
+$target = (& clang-cl --version) -join "`n"
+if ($LASTEXITCODE -ne 0 -or $target -notmatch '(?m)^Target: (aarch64|arm64).*-windows') {
     throw "Native ARM64 LLVM is required; clang target is $target"
 }
 $cuda = if ($Accelerator -eq 'cuda13') { 'ON' } else { 'OFF' }

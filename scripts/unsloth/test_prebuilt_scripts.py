@@ -191,12 +191,21 @@ class PrebuiltScriptsTest(unittest.TestCase):
         cm.mkdir()
         (cm / "CMakeLists.txt").write_text(
             'set(AUDIOCPP_GIT_SHA "unknown")\nset(AUDIOCPP_GIT_DATE "unknown")\nif (GIT_FOUND)\nendif()\n')
+        patch = cm / "tools/cmake/espeak_patch.cmake"
+        patch.parent.mkdir(parents=True)
+        patch.write_text(
+            '# upstream behavior stays\n# BEGIN UNSLOTH_WINDOWS_COMPAT\n# obsolete\n# END UNSLOTH_WINDOWS_COMPAT\n')
         r = subprocess.run(["bash", str(HERE / "stamp_source.sh"), str(cm), COMMIT, "2026-09-24"],
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
         text = (cm / "CMakeLists.txt").read_text()
         self.assertIn('set(AUDIOCPP_GIT_SHA "ac16661")', text)
         self.assertIn('EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git"', text)
+        stamped_patch = patch.read_text()
+        self.assertIn("# upstream behavior stays", stamped_patch)
+        self.assertNotIn("# obsolete", stamped_patch)
+        self.assertIn("#include <io.h>", stamped_patch)
+        self.assertEqual(stamped_patch.count("# BEGIN UNSLOTH_WINDOWS_COMPAT"), 1)
         (cm / "CMakeLists.txt").write_text("project(x)\n")
         r = subprocess.run(["bash", str(HERE / "stamp_source.sh"), str(cm), COMMIT, "2026-09-24"],
                            capture_output=True, text=True)
