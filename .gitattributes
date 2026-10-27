@@ -2,6 +2,9 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+# Unified patches need LF and single-space blank context lines.
+scripts/unsloth/patches/*.patch text eol=lf whitespace=-blank-at-eol
+
 # Binary, media, model, and archive files.
 *.7z binary
 *.bin binary

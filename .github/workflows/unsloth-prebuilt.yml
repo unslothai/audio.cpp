@@ -123,6 +123,7 @@ jobs:
         run: |
           python3 tooling/scripts/unsloth/test_prebuilt_scripts.py
           python3 tooling/scripts/unsloth/test_windows_arm64_prebuilts.py
+          python3 tooling/scripts/unsloth/test_cuda_attention_probe.py
 
       - name: Resolve immutable commit + stamp source tree
         id: r

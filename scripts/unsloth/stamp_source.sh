@@ -55,4 +55,13 @@ if [ -f "$ESPEAK_PATCH" ]; then
   printf '\n' >> "$ESPEAK_PATCH"
   printf '%s\n' "$WINDOWS_COMPAT" >> "$ESPEAK_PATCH"
 fi
+
+# NO_VMM removes ggml's transitive driver linkage. Probe capabilities through
+# the already-linked CUDA runtime so GPU-less runners can still load the build.
+ATTENTION_PROBE="$SRC/src/framework/core/attention_fallback.cpp"
+if [ -f "$ATTENTION_PROBE" ] && grep -q 'AUDIOCPP_CUDA_DRIVER_PROBE' "$ATTENTION_PROBE"; then
+  RUNTIME_PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/cuda-runtime-capability-probe.patch"
+  git -C "$SRC" apply --check "$RUNTIME_PATCH"
+  git -C "$SRC" apply "$RUNTIME_PATCH"
+fi
 echo "stamped $SRC: git ${SHORT} ${DATE}"

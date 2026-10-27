@@ -78,6 +78,9 @@ The shared source export also carries the marked Windows eSpeak compatibility
 patch from the tooling checkout. It adds the CRT declaration and correct argv
 casts needed by native `clang-cl`; other platforms keep their upstream behavior.
 The bundle includes that exact patch with the eSpeak source and license notices.
+The export also applies a narrow CUDA capability-probe patch: it queries the
+already-linked CUDA runtime, preserving Volta attention gating without requiring
+a driver-library import when ggml is built with `NO_VMM` for CPU fallback.
 
 Publication is **atomic**: the release is created as a draft (invisible to the
 anonymous API the installer reads), every asset is uploaded, then it is flipped
