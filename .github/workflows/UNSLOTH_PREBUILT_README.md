@@ -253,8 +253,10 @@ layout/import checks, manifests and checksums apply. All three ARM64 assets are
 required by the atomic publication gate. To add them to an already released
 upstream version, manually dispatch with a **new** `packaging_suffix` (for
 example `unsloth.2`): the automatic resolver skips already published upstream
-tags. Studio's pinned release/digests must subsequently be updated to adopt the
-new assets.
+tags. Studio installers that track the newest release can then adopt the new
+assets and published checksums. Installations with an explicit
+`UNSLOTH_AUDIO_CPP_TAG` pin, or older Studio versions with embedded pins, need
+their release selection updated separately.
 
 ## Manifest schema (`audio-cpp-prebuilt-manifest.json`)
 
