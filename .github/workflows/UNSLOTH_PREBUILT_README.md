@@ -34,6 +34,11 @@ scripts/unsloth/
   package_bundle.py            curate one bundle / the cudart zip / the manifest + sha256 index
   validate_bundle.py           CI gate: layout, closure, --help/--version, TTS + STT smoke
   test_prebuilt_scripts.py     self-test of the above (runs in the resolve job)
+  build_windows_arm64.ps1      native ARM64 CPU / CUDA build, including static eSpeak
+  windows_arm64_native.cmake   native LLVM and ARM64 CUDA target configuration
+  setup_cuda_windows_arm64.ps1 assemble the pinned CUDA 13.4.1 components (SHA256 verified)
+  check_windows_arch.py       verify all shipped PEs have the declared architecture
+  test_windows_arm64_prebuilts.py architecture + ARM64 release-contract tests
 ```
 
 Upstream's own workflows (`release.yml`, `linux-build.yml`, ...) are left
@@ -68,6 +73,14 @@ tarball **once**. Every build job extracts that tarball and checks its
 packaging tag shipped. A published packaging tag is never rebuilt: bump
 `packaging_suffix` (`unsloth.2`, ...). Upstream `main` moves; the pipeline only
 ever builds the tag it is given.
+
+The shared source export also carries the marked Windows eSpeak compatibility
+patch from the tooling checkout. It adds the CRT declaration and correct argv
+casts needed by native `clang-cl`; other platforms keep their upstream behavior.
+The bundle includes that exact patch with the eSpeak source and license notices.
+The export also applies a narrow CUDA capability-probe patch: it queries the
+already-linked CUDA runtime, preserving Volta attention gating without requiring
+a driver-library import when ggml is built with `NO_VMM` for CPU fallback.
 
 Publication is **atomic**: the release is created as a draft (invisible to the
 anonymous API the installer reads), every asset is uploaded, then it is flipped
@@ -128,7 +141,7 @@ annotation until issues are enabled.
 
 ```
 audio-<tag>-bin-<os>-<arch>-<accel>.<ext>      <os> = ubuntu | windows | macos
-audio-<tag>-cudart-windows-x64-<accel>.zip     Windows CUDA runtime companion
+audio-<tag>-cudart-windows-<arch>-<accel>.zip     Windows CUDA runtime companion
 ```
 
 This is upstream's naming, which the Studio installer's resolver also reads.
@@ -148,6 +161,9 @@ This is upstream's naming, which the Studio installer's resolver also reads.
 | `audio-<tag>-bin-windows-x64-cuda13.zip` | `windows-2022` | CUDA 13.0.2 (Jimver), `ggml-cuda.dll` | yes |
 | `audio-<tag>-cudart-windows-x64-cuda12.zip` | `windows-2022` | cudart64 / cublas64 / cublasLt64 / cufft64 of 12.8.1 | yes |
 | `audio-<tag>-cudart-windows-x64-cuda13.zip` | `windows-2022` | the same DLLs of 13.0.2 | yes |
+| `audio-<tag>-bin-windows-arm64-cpu.zip` | `windows-11-arm` | native LLVM, single baseline ARM CPU backend, static eSpeak | yes |
+| `audio-<tag>-bin-windows-arm64-cuda13.zip` | `windows-11-arm` | CUDA 13.4.1, sm_121a / sm_120a + compute_100 PTX | yes |
+| `audio-<tag>-cudart-windows-arm64-cuda13.zip` | `windows-11-arm` | ARM64 cudart / cuBLAS / cuBLASLt / cuFFT | yes |
 | `audio-<tag>-bin-macos-arm64-metal.tar.gz` | `macos-15` | Metal on, deployment target 13.3 | yes |
 | `audio-<tag>-bin-macos-x64-metal.tar.gz` | `macos-15-intel` | Metal off (name kept; Studio runs it on CPU) | yes |
 
@@ -212,9 +228,38 @@ arch-specific PTX cannot JIT anywhere else, so the forward-compatible PTX is
 the PTX). Fatbins use ggml's `-compress-mode=size`. Expect roughly 200 MB per
 Linux CUDA bundle (vs about 1 GB for a bundle carrying the CUDA libraries).
 
-Windows CUDA bundles use `GGML_BACKEND_DL` (kernels once, in `ggml-cuda.dll`)
+Windows x64 CUDA bundles use `GGML_BACKEND_DL` (kernels once, in `ggml-cuda.dll`)
 and get the runtime DLLs from the separate `-cudart-` zip, which Studio skips
 when the running torch already ships that CUDA line.
+
+### Windows ARM64
+
+Both ARM64 legs run natively on `windows-11-arm`, allowing static eSpeak's data
+generators and the finished Kokoro/Moonshine CPU smoke tests to execute. Native
+LLVM is required: ggml rejects MSVC ARM CPU kernels. Use the baseline single CPU
+backend with `ENGINE_ENABLE_CPU_ALL_VARIANTS=OFF`; ggml's Windows ARM all-variants
+branch is unsupported. These bundles require Windows 11.
+
+The CUDA leg compiles the entire server, including audio.cpp's CUDA ISTFT and
+sampling sources, rather than overlaying just a `ggml-cuda.dll`. NVIDIA's native
+ARM64 nvcc and libnvvm compile against ARM64 target libraries; the shipped runtime
+DLLs are also ARM64. CUDA 13.4.1 components and SHA256 values are pinned in
+`scripts/unsloth/cuda_windows_arm64_redist.json`. CUDA 12 is not offered for
+Windows ARM64. The static CUDA leg disables ggml VMM to avoid a direct
+`nvcuda.dll` import on the GPU-less runner, so its CPU fallback can be tested with
+the companion runtime ZIP. GPU execution still requires an NVIDIA GPU and a
+compatible driver; hosted-runner smoke tests do not test GPU execution.
+
+Every executable/DLL in each finished ARM64 bundle and CUDA runtime ZIP is
+checked for ARM64 PE machine type. Existing signing, signature verification,
+layout/import checks, manifests and checksums apply. All three ARM64 assets are
+required by the atomic publication gate. To add them to an already released
+upstream version, manually dispatch with a **new** `packaging_suffix` (for
+example `unsloth.2`): the automatic resolver skips already published upstream
+tags. Studio installers that track the newest release can then adopt the new
+assets and published checksums. Installations with an explicit
+`UNSLOTH_AUDIO_CPP_TAG` pin, or older Studio versions with embedded pins, need
+their release selection updated separately.
 
 ## Manifest schema (`audio-cpp-prebuilt-manifest.json`)
 

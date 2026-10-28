@@ -1,0 +1,34 @@
+{
+  "cuda_toolkit": "13.4.1",
+  "source": "https://developer.download.nvidia.com/compute/cuda/redist/redistrib_13.4.1.json",
+  "components": [
+    {
+      "relative_path": "cccl/windows-arm64/cccl-windows-arm64-13.3.4.2.1-archive.zip",
+      "sha256": "e8a7c96268ae6c52a7b8b07d96e1f84ab8eae5619c3b989024ce712dda5c2cc2"
+    },
+    {
+      "relative_path": "cuda_crt/windows-arm64/cuda_crt-windows-arm64-13.4.59-archive.zip",
+      "sha256": "a84f570d06497cf14187ddf9a2d656d752aaf66b2025c11eb93af01a8a1ce5ff"
+    },
+    {
+      "relative_path": "cuda_nvcc/windows-arm64/cuda_nvcc-windows-arm64-13.4.59-archive.zip",
+      "sha256": "4d26510f9d5b644e784a02b13423f9c8b79f8b15613ea0bb325bad42ed3443c4"
+    },
+    {
+      "relative_path": "libnvvm/windows-arm64/libnvvm-windows-arm64-13.4.59-archive.zip",
+      "sha256": "2d051ea3fffddf67458fe66004e7045015409709c57f8cdcdade88d479b62e47"
+    },
+    {
+      "relative_path": "cuda_cudart/windows-arm64/cuda_cudart-windows-arm64-13.4.49-archive.zip",
+      "sha256": "d48085b557db615f1095d4a6f96d4d1fcc8ba0c4fd16ad40f30f953b6ae422cf"
+    },
+    {
+      "relative_path": "libcublas/windows-arm64/libcublas-windows-arm64-13.7.0.27-archive.zip",
+      "sha256": "932794dcd1e67e152ab2aeaf32ee8141ded807c6ea6d8f85692c40b02fdd09d7"
+    },
+    {
+      "relative_path": "libcufft/windows-arm64/libcufft-windows-arm64-12.4.0.34-archive.zip",
+      "sha256": "fdc54525c2de814a5545b8d98a2a819916c1fa24d6559b8ee96e5d15cb850d87"
+    }
+  ]
+}

@@ -39,4 +39,29 @@ if ! grep -qxF "set(AUDIOCPP_GIT_SHA \"${SHORT}\")" "$CM" \
 fi
 
 printf '%s\n' "$COMMIT" > "$SRC/UNSLOTH_SOURCE_COMMIT"
+
+# The build source is the immutable UPSTREAM tag, not this tooling checkout.
+# Carry only our Windows compatibility block into that ONE source export,
+# preserving the rest of upstream's eSpeak patch for every platform. The GPL
+# source note includes the actual patch next to the finished server.
+ESPEAK_PATCH="$SRC/tools/cmake/espeak_patch.cmake"
+if [ -f "$ESPEAK_PATCH" ]; then
+  TOOLING_PATCH="$(dirname "${BASH_SOURCE[0]}")/../../tools/cmake/espeak_patch.cmake"
+  grep -q '^# BEGIN UNSLOTH_WINDOWS_COMPAT$' "$TOOLING_PATCH"
+  grep -q '^# END UNSLOTH_WINDOWS_COMPAT$' "$TOOLING_PATCH"
+  WINDOWS_COMPAT="$(sed -n '/^# BEGIN UNSLOTH_WINDOWS_COMPAT$/,/^# END UNSLOTH_WINDOWS_COMPAT$/p' "$TOOLING_PATCH")"
+  sed -i.bak '/^# BEGIN UNSLOTH_WINDOWS_COMPAT$/,/^# END UNSLOTH_WINDOWS_COMPAT$/d' "$ESPEAK_PATCH"
+  rm -f "$ESPEAK_PATCH.bak"
+  printf '\n' >> "$ESPEAK_PATCH"
+  printf '%s\n' "$WINDOWS_COMPAT" >> "$ESPEAK_PATCH"
+fi
+
+# NO_VMM removes ggml's transitive driver linkage. Probe capabilities through
+# the already-linked CUDA runtime so GPU-less runners can still load the build.
+ATTENTION_PROBE="$SRC/src/framework/core/attention_fallback.cpp"
+if [ -f "$ATTENTION_PROBE" ] && grep -q 'AUDIOCPP_CUDA_DRIVER_PROBE' "$ATTENTION_PROBE"; then
+  RUNTIME_PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/cuda-runtime-capability-probe.patch"
+  git -C "$SRC" apply --check "$RUNTIME_PATCH"
+  git -C "$SRC" apply "$RUNTIME_PATCH"
+fi
 echo "stamped $SRC: git ${SHORT} ${DATE}"

@@ -12,18 +12,15 @@
 
 // ggml-hip publicly defines GGML_USE_CUDA for its consumers (hipified CUDA
 // sources), so GGML_USE_CUDA alone does not imply a real CUDA toolchain with
-// the driver library linked. ENGINE_GGML_HIP_BACKEND marks the HIP case.
+// the CUDA runtime linked. ENGINE_GGML_HIP_BACKEND marks the HIP case.
 #if defined(GGML_USE_CUDA) && !defined(ENGINE_GGML_HIP_BACKEND)
-#define AUDIOCPP_CUDA_DRIVER_PROBE 1
-// CUDA driver API, declared manually so this translation unit needs neither
-// the CUDA headers on its include path nor any CMake changes. The driver
-// library is already linked transitively through ggml-cuda. Attribute ids
-// CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR=75 / MINOR=76 are stable ABI.
+#define AUDIOCPP_CUDA_RUNTIME_PROBE 1
+// The already-linked CUDA runtime keeps this probe usable with ggml's NO_VMM
+// builds, which need not import the driver library at process startup. Declare
+// the stable API here so this translation unit needs no CUDA include path.
+// cudaDevAttrComputeCapabilityMajor=75 / Minor=76 are stable ABI attribute ids.
 extern "C" {
-typedef int kCcProbeCuDevice;
-typedef int kCcProbeCuResult;
-kCcProbeCuResult cuDeviceGet(kCcProbeCuDevice * device, int ordinal);
-kCcProbeCuResult cuDeviceGetAttribute(int * value, int attrib, kCcProbeCuDevice device);
+int cudaDeviceGetAttribute(int * value, int attrib, int device);
 }
 #endif
 
@@ -63,7 +60,7 @@ AttentionPreference parse_preference_value(const std::string & value, const char
 // select the MMA kernel with no usable device code. Unknown backends and
 // query failures fail OPEN to preserve current behavior.
 bool cuda_device_wants_eager(ggml_backend_t backend) {
-#ifdef AUDIOCPP_CUDA_DRIVER_PROBE
+#ifdef AUDIOCPP_CUDA_RUNTIME_PROBE
     if (backend == nullptr) {
         return false;
     }
@@ -83,16 +80,12 @@ bool cuda_device_wants_eager(ggml_backend_t backend) {
     if (end == name + 4 || ordinal < 0) {
         return false;
     }
-    kCcProbeCuDevice cu_device = -1;
-    if (cuDeviceGet(&cu_device, static_cast<int>(ordinal)) != 0) {
-        return false;
-    }
     int major = 0;
     int minor = 0;
-    if (cuDeviceGetAttribute(&major, 75 /* COMPUTE_CAPABILITY_MAJOR */, cu_device) != 0) {
+    if (cudaDeviceGetAttribute(&major, 75 /* COMPUTE_CAPABILITY_MAJOR */, static_cast<int>(ordinal)) != 0) {
         return false;
     }
-    if (cuDeviceGetAttribute(&minor, 76 /* COMPUTE_CAPABILITY_MINOR */, cu_device) != 0) {
+    if (cudaDeviceGetAttribute(&minor, 76 /* COMPUTE_CAPABILITY_MINOR */, static_cast<int>(ordinal)) != 0) {
         return false;
     }
     const int cc = major * 100 + minor * 10;
@@ -100,7 +93,7 @@ bool cuda_device_wants_eager(ggml_backend_t backend) {
 #else
     (void) backend;
     return false;
-#endif  // AUDIOCPP_CUDA_DRIVER_PROBE
+#endif  // AUDIOCPP_CUDA_RUNTIME_PROBE
 }
 
 }  // namespace
