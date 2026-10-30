@@ -300,6 +300,7 @@ jobs:
         run: |
           set -eux
           cp "dist/audio.cpp-source-${TAG}.tar.gz" "dist/audio.cpp-source-commit-${COMMIT}.tar.gz"
+          python3 tooling/scripts/unsloth/package_bundle.py --emit-espeak-source --dist dist --tag "$TAG"
           ls -la dist
 
       # Branding gate: every bundle's BUILD_INFO.txt must open with the exact
@@ -350,7 +351,8 @@ jobs:
             "audio-${TAG}-cudart-windows-x64-cuda13.zip" \
             "audio-${TAG}-bin-macos-arm64-metal.tar.gz" \
             "audio-${TAG}-bin-macos-x64-metal.tar.gz" \
-            "audio.cpp-source-${TAG}.tar.gz"; do
+            "audio.cpp-source-${TAG}.tar.gz" \
+            "espeak-ng-source-${TAG}.tar.gz"; do
             [ -s "dist/$f" ] || { echo "ERROR: missing required asset $f" >&2; fail=1; }
           done
           [ -s "dist/audio-${TAG}-bin-ubuntu-arm64-cpu.tar.gz" ] \

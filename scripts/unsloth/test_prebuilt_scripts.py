@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import hashlib
 import json
 import shutil
 import subprocess
@@ -48,6 +49,8 @@ class PrebuiltScriptsTest(unittest.TestCase):
         (self.bin / "espeak-ng-data.bin").write_bytes(b"\0" * 64)
         (self.bin / "audiocpp_espeak_pack").write_bytes(b"tool, never shipped")
         (self.bin / "licenses" / "espeak-ng" / "COPYING").write_text("GPL-3.0-or-later")
+        (self.bin / "licenses" / "espeak-ng" / "espeak-ng-1.52.0.tar.gz").write_bytes(b"src")
+        (self.bin / "licenses" / "espeak-ng" / "espeak_patch.cmake").write_text("patch")
         (self.src / "LICENSE").write_text("Apache-2.0")
         (self.src / "tools" / "cmake" / "espeak_static.cmake").write_text(
             "ExternalProject_Add(x\n"
@@ -64,6 +67,27 @@ class PrebuiltScriptsTest(unittest.TestCase):
                 "--accel", accel, "--espeak-commit", ESPEAK, "--no-run", *extra]
         return _quiet(pb.main, argv)[0]
 
+    def _source_with_espeak_pin(self, digest):
+        self.dist.mkdir(exist_ok=True)
+        recipe = self.tmp / "espeak_static.cmake"
+        recipe.write_text(
+            "    URL file://%s/refs/tags/1.52.0\n    URL_HASH SHA256=%s\n" % (self.tmp, digest))
+        with tarfile.open(self.dist / f"audio.cpp-source-{TAG}.tar.gz", "w:gz") as t:
+            t.add(recipe, arcname="audio.cpp/tools/cmake/espeak_static.cmake")
+        (self.tmp / "refs/tags").mkdir(parents=True, exist_ok=True)
+        (self.tmp / "refs/tags/1.52.0").write_bytes(b"espeak")
+
+    def test_espeak_source_is_published_once_and_verified(self):
+        self._source_with_espeak_pin(hashlib.sha256(b"espeak").hexdigest())
+        argv = ["--emit-espeak-source", "--dist", str(self.dist), "--tag", TAG]
+        self.assertEqual(_quiet(pb.main, argv)[0], 0)
+        self.assertEqual((self.dist / pb.espeak_source_asset(TAG)).read_bytes(), b"espeak")
+        self._source_with_espeak_pin("0" * 64)
+        (self.dist / pb.espeak_source_asset(TAG)).unlink()
+        with self.assertRaises(SystemExit):
+            _quiet(pb.main, argv)
+        self.assertFalse((self.dist / pb.espeak_source_asset(TAG)).exists())
+
     def test_package_layout_and_info(self):
         self.assertEqual(self.package(), 0)
         asset = self.dist / f"audio-{TAG}-bin-ubuntu-x64-cpu.tar.gz"
@@ -77,6 +101,9 @@ class PrebuiltScriptsTest(unittest.TestCase):
         self.assertNotIn("audiocpp_espeak_pack", names)
         self.assertEqual(first, pb.FINGERPRINT)
         self.assertIn(ESPEAK, source)
+        self.assertIn(pb.espeak_source_asset(TAG), source)
+        self.assertNotIn("licenses/espeak-ng/espeak-ng-1.52.0.tar.gz", names)
+        self.assertIn("licenses/espeak-ng/espeak_patch.cmake", names)
         # The keys Studio's install record uses, with its values.
         self.assertEqual((info["component"], info["backend"], info["os"], info["espeak"],
                           info["server_relpath"], info["asset"]),

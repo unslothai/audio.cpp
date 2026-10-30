@@ -19,6 +19,10 @@ Modes:
                       into audio-<tag>-cudart-windows-<arch>-<accel>.zip, the
                       companion Studio downloads unless torch ships the line.
 
+  --emit-espeak-source  Fetch the pinned eSpeak-ng tarball into --dist as
+                      espeak-ng-source-<tag>.tar.gz, so one release asset
+                      serves every bundle's source offer.
+
   --emit-manifest /   Aggregate every bundle in --dist into
   --emit-sha256       audio-cpp-prebuilt-manifest.json and
                       audio-cpp-prebuilt-sha256.json, read from each bundle's
@@ -41,6 +45,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -218,7 +223,10 @@ def _espeak_meta(src: Path) -> dict:
     cm = src / "tools" / "cmake" / "espeak_static.cmake"
     if not cm.is_file():
         die(f"{cm} not found; cannot describe the eSpeak-ng the bundle links")
-    text = cm.read_text(encoding="utf-8")
+    return _parse_espeak_meta(cm.read_text(encoding="utf-8"), cm)
+
+
+def _parse_espeak_meta(text: str, cm: object) -> dict:
     url = re.search(r"^\s*URL\s+(\S+)", text, re.M)
     digest = re.search(r"URL_HASH\s+SHA256=([0-9a-fA-F]{64})", text)
     version = re.search(r"refs/tags/([^/\s]+)$", url.group(1)) if url else None
@@ -227,12 +235,34 @@ def _espeak_meta(src: Path) -> dict:
     return {"version": version.group(1), "url": url.group(1), "sha256": digest.group(1).lower()}
 
 
+def espeak_source_asset(tag: str) -> str:
+    return f"espeak-ng-source-{tag}.tar.gz"
+
+
+def emit_espeak_source(dist: Path, tag: str) -> int:
+    archive = dist / f"audio.cpp-source-{tag}.tar.gz"
+    with tarfile.open(archive) as t:
+        member = next((m for m in t.getmembers() if m.name.endswith("/tools/cmake/espeak_static.cmake")), None)
+        if member is None:
+            die(f"{archive.name} has no tools/cmake/espeak_static.cmake")
+        espeak = _parse_espeak_meta(t.extractfile(member).read().decode("utf-8"), member.name)
+    with urllib.request.urlopen(espeak["url"], timeout=120) as response:
+        data = response.read()
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != espeak["sha256"]:
+        die(f"eSpeak-ng tarball sha256 {actual} does not match the pinned {espeak['sha256']}")
+    (dist / espeak_source_asset(tag)).write_bytes(data)
+    return 0
+
+
 def write_licenses(stage: Path, cfg: dict, espeak: dict) -> None:
     src = Path(cfg["src_dir"])
     bin_dir = Path(cfg["bin_dir"])
     lic = stage / "licenses"
     if (bin_dir / "licenses").is_dir():
         shutil.copytree(bin_dir / "licenses", lic, dirs_exist_ok=True)
+    for tarball in (lic / "espeak-ng").glob("espeak-ng-*.tar.gz"):
+        tarball.unlink()
     (lic / "espeak-ng").mkdir(parents=True, exist_ok=True)
     if not (lic / "espeak-ng" / "COPYING").is_file():
         die("the build did not stage licenses/espeak-ng/COPYING (GPL-3.0-or-later text)")
@@ -259,9 +289,10 @@ def write_licenses(stage: Path, cfg: dict, espeak: dict) -> None:
         f"source tarball:    {espeak['url']}\n"
         f"tarball sha256:    {espeak['sha256']}\n"
         "\n"
-        "The exact tarball the build used is included beside this file when the\n"
-        "build staged it (espeak-ng-*.tar.gz), together with espeak_patch.cmake,\n"
-        "the build-time patch applied to it, and espeak_static.cmake, the recipe.\n"
+        "The exact tarball the build used is published beside this bundle as the\n"
+        f"release asset {espeak_source_asset(cfg['tag'])}. espeak_patch.cmake, the\n"
+        "build-time patch applied to it, and espeak_static.cmake, the recipe, are\n"
+        "included beside this file.\n"
         "\n"
         "Written offer: for three years from the date of this release, the Unsloth\n"
         "team will provide the complete corresponding source code of this binary\n"
@@ -547,6 +578,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--emit-manifest", action="store_true")
     ap.add_argument("--emit-sha256", action="store_true")
+    ap.add_argument("--emit-espeak-source", action="store_true")
     ap.add_argument("--dist", help="aggregate: dir holding the built archives")
     ap.add_argument("--out", help="aggregate: dir for the sidecars (default --dist)")
     ap.add_argument("--cudart-dir", help="Windows: dir holding one CUDA line's runtime DLLs")
@@ -567,6 +599,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--espeak-commit", help="eSpeak-ng commit of the tag the build fetched (40 hex)")
     ap.add_argument("--no-run", action="store_true", help="do not run --version (GPU-less runner)")
     a = ap.parse_args(argv)
+    if a.emit_espeak_source:
+        return emit_espeak_source(Path(a.dist), a.tag)
     if a.emit_manifest or a.emit_sha256:
         for req in ("dist", "tag", "upstream_tag", "commit"):
             if not getattr(a, req):
