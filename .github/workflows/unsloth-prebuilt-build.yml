@@ -566,8 +566,10 @@ jobs:
           $redist = Get-ChildItem "$vs/VC/Redist/MSVC" -Directory |
             Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
             Select-Object -First 1
-          $crt = Join-Path $redist.FullName 'arm64/Microsoft.VC143.CRT'
-          if (-not (Test-Path -LiteralPath $crt)) { throw "missing ARM64 VC runtime: $crt" }
+          # The folder is named after the toolset (VC143, VC145), which moves with the runner image.
+          $crt = Get-ChildItem (Join-Path $redist.FullName 'arm64') -Directory -Filter 'Microsoft.VC*.CRT' |
+            Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $crt) { throw "missing ARM64 VC runtime under $($redist.FullName)/arm64" }
           python tooling/scripts/unsloth/check_windows_arch.py --dir $env:BIN_DIR --arch arm64 --vc-runtime-source $crt
           if ($LASTEXITCODE -ne 0) { throw 'ARM64 VC runtime collection failed' }
 
