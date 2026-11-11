@@ -290,9 +290,11 @@ def write_licenses(stage: Path, cfg: dict, espeak: dict) -> None:
         f"tarball sha256:    {espeak['sha256']}\n"
         "\n"
         "The exact tarball the build used is published beside this bundle as the\n"
-        f"release asset {espeak_source_asset(cfg['tag'])}. espeak_patch.cmake, the\n"
-        "build-time patch applied to it, and espeak_static.cmake, the recipe, are\n"
-        "included beside this file.\n"
+        f"release asset {espeak_source_asset(cfg['tag'])}:\n"
+        f"https://github.com/{cfg['source_repo']}/releases/download/{cfg['tag']}/"
+        f"{espeak_source_asset(cfg['tag'])}\n"
+        "espeak_patch.cmake, the build-time patch applied to it, and\n"
+        "espeak_static.cmake, the recipe, are included beside this file.\n"
         "\n"
         "Written offer: for three years from the date of this release, the Unsloth\n"
         "team will provide the complete corresponding source code of this binary\n"
@@ -554,7 +556,7 @@ def do_aggregate(a: argparse.Namespace) -> int:
         sha_index[r.name] = {"kind": f"windows-{m.group('arch')}-{m.group('accel')}-cuda-runtime",
                              "repo": a.source_repo, "sha256": digest, "source_commit": a.commit,
                              "upstream_tag": a.upstream_tag}
-    for p in sorted(dist.glob("audio.cpp-source-*.tar.gz")):
+    for p in sorted([*dist.glob("audio.cpp-source-*.tar.gz"), *dist.glob("espeak-ng-source-*.tar.gz")]):
         sha_index[p.name] = {"kind": "source", "repo": a.source_repo, "sha256": sha256_file(p),
                              "source_commit": a.commit, "upstream_tag": a.upstream_tag}
     if a.emit_manifest:

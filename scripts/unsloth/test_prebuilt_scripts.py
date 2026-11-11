@@ -101,7 +101,8 @@ class PrebuiltScriptsTest(unittest.TestCase):
         self.assertNotIn("audiocpp_espeak_pack", names)
         self.assertEqual(first, pb.FINGERPRINT)
         self.assertIn(ESPEAK, source)
-        self.assertIn(pb.espeak_source_asset(TAG), source)
+        self.assertIn(f"https://github.com/unslothai/audio.cpp/releases/download/{TAG}/"
+                      f"{pb.espeak_source_asset(TAG)}", source)
         self.assertNotIn("licenses/espeak-ng/espeak-ng-1.52.0.tar.gz", names)
         self.assertIn("licenses/espeak-ng/espeak_patch.cmake", names)
         # The keys Studio's install record uses, with its values.
@@ -144,6 +145,7 @@ class PrebuiltScriptsTest(unittest.TestCase):
         self.assertEqual(_quiet(pb.main, ["--cudart-dir", str(rt), "--out-dir", str(self.dist), "--tag", TAG,
                                           "--arch", "x64", "--accel", "cuda13"])[0], 0)
         (self.dist / f"audio.cpp-source-{TAG}.tar.gz").write_bytes(b"src")
+        (self.dist / pb.espeak_source_asset(TAG)).write_bytes(b"espeak")
         self.assertEqual(_quiet(pb.main, ["--emit-manifest", "--emit-sha256", "--dist", str(self.dist),
                                           "--tag", TAG, "--upstream-tag", UT, "--commit", COMMIT])[0], 0)
         man = json.loads((self.dist / pb.MANIFEST_NAME).read_text())
@@ -152,6 +154,7 @@ class PrebuiltScriptsTest(unittest.TestCase):
         self.assertEqual(kinds, ["bundle", "cuda-runtime"])
         self.assertIn(pb.MANIFEST_NAME, sha["artifacts"])
         self.assertIn(f"audio.cpp-source-{TAG}.tar.gz", sha["artifacts"])
+        self.assertEqual(sha["artifacts"][pb.espeak_source_asset(TAG)]["kind"], "source")
         # A stray DLL in the runtime dir is refused.
         (rt / "nvrtc64_130_0.dll").write_bytes(b"MZ")
         with self.assertRaises(SystemExit):
