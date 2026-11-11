@@ -61,8 +61,7 @@ FORBIDDEN_IN_BUNDLE = re.compile(
 # or torch (CUDA runtime), and any GPU driver (the Vulkan loader).
 WIN_HOST_IMPORTS = re.compile(
     r"^(nvcuda|cudart64_\d+|cublas64_\d+|cublasLt64_\d+|cufft64_\d+|vulkan-1)\.dll$", re.I)
-# The bundle ships the MSVC runtime app-local, so these must resolve inside it: the
-# runner's System32 has them and would hide a bundle that fails on a clean Windows.
+# Shipped app-local: must resolve in the bundle, since the runner's System32 would hide a gap.
 WIN_APP_LOCAL_IMPORTS = re.compile(r"^(vcruntime|msvcp|vcomp|concrt)140(_\w+)?\.dll$", re.I)
 
 failures: list[str] = []

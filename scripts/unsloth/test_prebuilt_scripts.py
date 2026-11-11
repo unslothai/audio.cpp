@@ -184,7 +184,6 @@ class PrebuiltScriptsTest(unittest.TestCase):
         self.assertFalse(vb.WIN_HOST_IMPORTS.match("ggml-cuda.dll"))
 
     def test_windows_closure_needs_app_local_msvc_runtime(self):
-        # The runner's System32 has the MSVC runtime; a bundle that relies on it fails on a clean Windows.
         system32 = self.tmp / "Windows" / "System32"
         system32.mkdir(parents=True)
         for dll in ("KERNEL32.dll", "VCOMP140.DLL"):

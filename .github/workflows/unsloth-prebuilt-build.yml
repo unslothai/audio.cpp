@@ -374,9 +374,7 @@ jobs:
 
       # App-local MSVC runtime (and vcomp140 for the OpenMP builds) so the
       # bundle runs on a clean Windows without the VC++ Redistributable.
-      # The folders are named after the toolset generation: Microsoft.VC143.CRT
-      # in Visual Studio 2022, Microsoft.VC145.CRT in Visual Studio 2026. Match
-      # the generation instead of naming it.
+      # Folder names follow the toolset (VC143 in VS 2022, VC145 in VS 2026), so match any.
       - name: Bundle VC runtime
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
