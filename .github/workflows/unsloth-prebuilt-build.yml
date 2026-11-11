@@ -376,7 +376,7 @@ jobs:
       # bundle runs on a clean Windows without the VC++ Redistributable.
       # The folders are named after the toolset generation: Microsoft.VC143.CRT
       # in Visual Studio 2022, Microsoft.VC145.CRT in Visual Studio 2026. Match
-      # the generation instead of naming it, and fail when the CRT is missing.
+      # the generation instead of naming it.
       - name: Bundle VC runtime
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -391,9 +391,7 @@ jobs:
             Get-ChildItem "$($dir.FullName)\*.dll" | Where-Object { $_.Name -match '^(vcruntime140|msvcp140|vcomp140)' } |
               Copy-Item -Destination $env:BIN_DIR
           }
-          foreach ($required in 'vcruntime140.dll', 'msvcp140.dll') {
-            if (-not (Test-Path (Join-Path $env:BIN_DIR $required))) { throw "the bundle has no $required" }
-          }
+          # validate_bundle.py fails any imported MSVC runtime DLL the bundle does not ship.
           Get-ChildItem $env:BIN_DIR | Select-Object Name, Length | Out-String | Write-Host
 
       # Before packaging, so every DLL the bundle carries is signed. Smart App

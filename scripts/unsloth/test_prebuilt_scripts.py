@@ -16,6 +16,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 from pathlib import Path
 
@@ -154,8 +155,9 @@ class PrebuiltScriptsTest(unittest.TestCase):
         self.assertIn("fingerprint", out)
         vb.failures.clear()
 
-    def test_pe_import_parser(self):
-        # Minimal PE32+ with one import descriptor naming FOO.dll.
+    @staticmethod
+    def _pe_importing(path: Path, dll: str) -> Path:
+        # Minimal PE32+ with one import descriptor naming dll.
         data = bytearray(0x400)
         data[:2] = b"MZ"
         data[0x3C:0x40] = (0x80).to_bytes(4, "little")
@@ -169,13 +171,39 @@ class PrebuiltScriptsTest(unittest.TestCase):
         sec = opt + 0xF0
         data[sec + 8:sec + 24] = b"".join(x.to_bytes(4, "little") for x in (0x200, 0x1000, 0x200, 0x200))
         data[0x200 + 12:0x200 + 16] = (0x1100).to_bytes(4, "little")
-        data[0x300:0x308] = b"FOO.dll\0"
-        p = self.tmp / "x.dll"
-        p.write_bytes(bytes(data))
+        name = dll.encode() + b"\0"
+        data[0x300:0x300 + len(name)] = name
+        path.write_bytes(bytes(data))
+        return path
+
+    def test_pe_import_parser(self):
+        p = self._pe_importing(self.tmp / "x.dll", "FOO.dll")
         self.assertEqual(vb._pe_imports(p), ["FOO.dll"])
         self.assertTrue(vb.WIN_HOST_IMPORTS.match("cudart64_12.dll"))
         self.assertTrue(vb.WIN_HOST_IMPORTS.match("vulkan-1.dll"))
         self.assertFalse(vb.WIN_HOST_IMPORTS.match("ggml-cuda.dll"))
+
+    def test_windows_closure_needs_app_local_msvc_runtime(self):
+        # The runner's System32 has the MSVC runtime; a bundle that relies on it fails on a clean Windows.
+        system32 = self.tmp / "Windows" / "System32"
+        system32.mkdir(parents=True)
+        for dll in ("KERNEL32.dll", "VCOMP140.DLL"):
+            (system32 / dll).write_bytes(b"MZ")
+        root = self.tmp / "bundle"
+        root.mkdir()
+        self._pe_importing(root / "audiocpp_server.exe", "KERNEL32.dll")
+        self._pe_importing(root / "ggml-cpu.dll", "VCOMP140.DLL")
+        with unittest.mock.patch.dict("os.environ", {"SystemRoot": str(self.tmp / "Windows")}):
+            vb.failures.clear()
+            _quiet(vb.closure_windows, root)
+            self.assertEqual(vb.failures, ["ggml-cpu.dll imports VCOMP140.DLL: the MSVC runtime must ship in the bundle"])
+            self._pe_importing(root / "vcomp140.dll", "KERNEL32.dll")
+            vb.failures.clear()
+            _quiet(vb.closure_windows, root)
+            self.assertEqual(vb.failures, [])
+        self.assertTrue(vb.WIN_APP_LOCAL_IMPORTS.match("vcruntime140_1.dll"))
+        self.assertTrue(vb.WIN_APP_LOCAL_IMPORTS.match("MSVCP140_ATOMIC_WAIT.dll"))
+        self.assertFalse(vb.WIN_APP_LOCAL_IMPORTS.match("ucrtbase.dll"))
 
     def test_zip_keeps_exec_bit(self):
         stage = self.tmp / "stage"
