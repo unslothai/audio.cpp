@@ -15,7 +15,7 @@ Checks, in order (any failure exits 1):
                 libnccl; newest GLIBC_ symbol <= --max-glibc; no dynamic
                 libstdc++. macOS: every non-system dylib reference resolves in
                 the bundle. Windows: every imported DLL is in the bundle, in
-                System32, or on the CUDA allowlist.
+                System32, or on the CUDA allowlist; the MSVC runtime only in the bundle.
   3. run        --help exits 0 and --version lists --expect-backends
                 (skipped with --no-run, e.g. a CUDA build on a GPU-less runner).
   4. smoke      (--smoke) start the server exactly as Studio does (one model,
@@ -61,6 +61,8 @@ FORBIDDEN_IN_BUNDLE = re.compile(
 # or torch (CUDA runtime), and any GPU driver (the Vulkan loader).
 WIN_HOST_IMPORTS = re.compile(
     r"^(nvcuda|cudart64_\d+|cublas64_\d+|cublasLt64_\d+|cufft64_\d+|vulkan-1)\.dll$", re.I)
+# Shipped app-local: must resolve in the bundle, since the runner's System32 would hide a gap.
+WIN_APP_LOCAL_IMPORTS = re.compile(r"^(vcruntime|msvcp|vcomp|concrt)140(_\w+)?\.dll$", re.I)
 
 failures: list[str] = []
 
@@ -261,7 +263,12 @@ def closure_windows(root: Path) -> None:
             continue
         for dll in _pe_imports(p):
             low = dll.lower()
-            if low in present or low.startswith(("api-ms-win-", "ext-ms-")) or (system32 / dll).exists():
+            if low in present:
+                continue
+            if WIN_APP_LOCAL_IMPORTS.match(dll):
+                fail(f"{p.name} imports {dll}: the MSVC runtime must ship in the bundle")
+                continue
+            if low.startswith(("api-ms-win-", "ext-ms-")) or (system32 / dll).exists():
                 continue
             if WIN_HOST_IMPORTS.match(dll):
                 print(f"note: {p.name} imports host-provided {dll}")

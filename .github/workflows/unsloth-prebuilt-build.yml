@@ -374,6 +374,7 @@ jobs:
 
       # App-local MSVC runtime (and vcomp140 for the OpenMP builds) so the
       # bundle runs on a clean Windows without the VC++ Redistributable.
+      # Folder names follow the toolset (VC143 in VS 2022, VC145 in VS 2026), so match any.
       - name: Bundle VC runtime
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -381,13 +382,14 @@ jobs:
           $redist = Get-ChildItem "$vs\VC\Redist\MSVC" -Directory |
             Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
             Select-Object -First 1
-          foreach ($sub in 'x64\Microsoft.VC143.CRT', 'x64\Microsoft.VC143.OPENMP') {
-            $dir = Join-Path $redist.FullName $sub
-            if (Test-Path $dir) {
-              Get-ChildItem "$dir\*.dll" | Where-Object { $_.Name -match '^(vcruntime140|msvcp140|vcomp140)' } |
-                Copy-Item -Destination $env:BIN_DIR
-            }
+          $crt = @(Get-ChildItem (Join-Path $redist.FullName 'x64') -Directory -Filter 'Microsoft.VC*.CRT')
+          if ($crt.Count -ne 1) { throw "expected one x64 VC runtime folder under $($redist.FullName), found $($crt.Count)" }
+          $omp = @(Get-ChildItem (Join-Path $redist.FullName 'x64') -Directory -Filter 'Microsoft.VC*.OPENMP')
+          foreach ($dir in @($crt) + @($omp)) {
+            Get-ChildItem "$($dir.FullName)\*.dll" | Where-Object { $_.Name -match '^(vcruntime140|msvcp140|vcomp140)' } |
+              Copy-Item -Destination $env:BIN_DIR
           }
+          # validate_bundle.py fails any imported MSVC runtime DLL the bundle does not ship.
           Get-ChildItem $env:BIN_DIR | Select-Object Name, Length | Out-String | Write-Host
 
       # Before packaging, so every DLL the bundle carries is signed. Smart App
@@ -566,8 +568,10 @@ jobs:
           $redist = Get-ChildItem "$vs/VC/Redist/MSVC" -Directory |
             Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
             Select-Object -First 1
-          $crt = Join-Path $redist.FullName 'arm64/Microsoft.VC143.CRT'
-          if (-not (Test-Path -LiteralPath $crt)) { throw "missing ARM64 VC runtime: $crt" }
+          # The folder is named after the toolset (VC143, VC145), which moves with the runner image.
+          $crt = Get-ChildItem (Join-Path $redist.FullName 'arm64') -Directory -Filter 'Microsoft.VC*.CRT' |
+            Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $crt) { throw "missing ARM64 VC runtime under $($redist.FullName)/arm64" }
           python tooling/scripts/unsloth/check_windows_arch.py --dir $env:BIN_DIR --arch arm64 --vc-runtime-source $crt
           if ($LASTEXITCODE -ne 0) { throw 'ARM64 VC runtime collection failed' }
 
