@@ -186,9 +186,10 @@ Each release also carries `audio-cpp-prebuilt-manifest.json`,
   floor (checked); it still needs the host's `libgomp.so.1` (OpenMP, symbol
   versions up to `GOMP_4.0`).
 - `LICENSE` (audio.cpp, Apache-2.0), `COPYING-NOTICE.txt`, and `licenses/`:
-  `espeak-ng/COPYING` (GPL-3.0-or-later), the exact eSpeak-ng source tarball
-  and build patch the build used, `espeak-ng/SOURCE.txt` (eSpeak-ng version,
-  **commit**, tarball URL + sha256, and a written source offer), and the notices
+  `espeak-ng/COPYING` (GPL-3.0-or-later), the build patch and recipe the build
+  used, `espeak-ng/SOURCE.txt` (eSpeak-ng version, **commit**, tarball URL +
+  sha256, the release asset `espeak-ng-source-<tag>.tar.gz` holding the exact
+  tarball, and a written source offer), and the notices
   of ggml, sentencepiece, cJSON, libyaml and cpp-httplib.
 - **Licensing:** because eSpeak-ng is statically linked, the phonemizer-enabled
   `audiocpp_server` in these bundles is a combined work distributed under
@@ -376,6 +377,6 @@ unless every required asset (table above) exists, and writes the two sidecars.
   integrity against the same origin, not authenticity.
 - Every bundle carries the `Compiled by the Unsloth team` fingerprint in
   `BUILD_INFO.txt`; the orchestrator refuses to publish an unbranded one.
-- The stamped source tarballs are release assets, and each bundle's
-  `licenses/espeak-ng/` carries the eSpeak-ng source it was built from, so the
-  GPL corresponding source ships with the binaries.
+- The stamped source tarballs and the exact eSpeak-ng tarball
+  (`espeak-ng-source-<tag>.tar.gz`, sha256-checked against the pin) are assets
+  of the same release, so the GPL corresponding source ships with the binaries.
